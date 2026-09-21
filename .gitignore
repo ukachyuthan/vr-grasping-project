@@ -1,0 +1,5 @@
+node_modules
+dist
+.DS_Store
+# demos you record against the bundled scenarios
+sample-events/*/demos/

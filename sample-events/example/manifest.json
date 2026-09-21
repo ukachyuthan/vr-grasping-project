@@ -1,0 +1,42 @@
+{
+ "schema": "unitree-grasp-failure-manifest/v1",
+ "run": "example",
+ "updated_at": "2026-09-21T06:12:36+00:00",
+ "cases": [
+  {
+   "case_id": "block__it000101__q1",
+   "shape": "block",
+   "yaw_bin": 2,
+   "iteration": 109,
+   "mean_failed_reward": 0.126228
+  },
+  {
+   "case_id": "torus__it000101__q0",
+   "shape": "torus",
+   "yaw_bin": 0,
+   "iteration": 109,
+   "mean_failed_reward": 0.146402
+  },
+  {
+   "case_id": "wedge__it000101__q4",
+   "shape": "wedge",
+   "yaw_bin": 6,
+   "iteration": 109,
+   "mean_failed_reward": 0.146068
+  },
+  {
+   "case_id": "cylinder__it000101__q2",
+   "shape": "cylinder",
+   "yaw_bin": 7,
+   "iteration": 109,
+   "mean_failed_reward": 0.148671
+  },
+  {
+   "case_id": "bracket__it000101__q3",
+   "shape": "bracket",
+   "yaw_bin": 3,
+   "iteration": 109,
+   "mean_failed_reward": 0.071065
+  }
+ ]
+}

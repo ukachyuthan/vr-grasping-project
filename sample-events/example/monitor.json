@@ -1,0 +1,22 @@
+{
+ "iteration": 109,
+ "fail_threshold": 4,
+ "replay_prob": 1.0,
+ "warmup_iters": 0,
+ "queue_size": 0,
+ "queue_capacity": 5,
+ "queue_by_replay_failures": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "queue_per_shape": {},
+ "cases_exported": 5,
+ "max_cases": 200,
+ "queued": 5,
+ "rejected_full": 20,
+ "replays": 20,
+ "replay_successes": 0,
+ "replay_failures": 20
+}

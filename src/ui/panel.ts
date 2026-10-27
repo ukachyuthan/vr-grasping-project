@@ -93,6 +93,7 @@ const LAYOUT: { id: string; label: string }[][] = [
     { id: 'ghosts', label: 'ROBOT' },
   ],
   [{ id: 'recenter', label: 'RECENTER' }],
+  [{ id: 'impossible', label: 'IMPOSSIBLE' }],
 ];
 
 /**

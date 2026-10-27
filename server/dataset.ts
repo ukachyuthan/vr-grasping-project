@@ -17,12 +17,15 @@
  *   GET  /api/sources/:src/cases/:run/:case        one case
  *   GET  /api/sources/:src/files/:run/<path>       a file inside a run (meshes)
  *   POST /api/sources/:src/demos/:run/:case        save a demo JSON
+ *   POST /api/sources/:src/verdicts/:run/:case     save the case's verdict (e.g. impossible)
+ *
+ * Verdicts live in <run>/verdicts/<case>.json, one per case, latest wins.
  */
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import type { Plugin } from 'vite';
-import type { CaseSummary, FailureCase, SourceInfo } from '../src/data/types';
+import type { CaseSummary, CaseVerdict, FailureCase, SourceInfo, Verdict } from '../src/data/types';
 
 const SEGMENT = /^[A-Za-z0-9_.-]+$/;
 const MAX_DEMO_BYTES = 32 * 1024 * 1024;
@@ -98,14 +101,35 @@ function countDemos(runDir: string, caseId: string): number {
   }
 }
 
+function readVerdict(runDir: string, caseId: string): Verdict | null {
+  return readJson<CaseVerdict>(path.join(runDir, 'verdicts', `${caseId}.json`))?.verdict ?? null;
+}
+
+/**
+ * Cases held out from demonstration by the run's split.json
+ * (unitree-grasping scripts/split_failure_cases.py): never shown, so they stay
+ * an honest test of whether demos on other cases generalize.
+ */
+function heldOut(runDir: string): Set<string> {
+  return new Set(readJson<{ heldout?: string[] }>(path.join(runDir, 'split.json'))?.heldout ?? []);
+}
+
 export function listCases(source: Source): CaseSummary[] {
   const out: CaseSummary[] = [];
   for (const [run, dir] of source.runs) {
-    const manifest = readJson<{ cases: Omit<CaseSummary, 'run' | 'demos' | 'source'>[] }>(
+    const manifest = readJson<{ cases: Omit<CaseSummary, 'run' | 'demos' | 'source' | 'verdict'>[] }>(
       path.join(dir, 'manifest.json'),
     );
+    const hidden = heldOut(dir);
     for (const c of manifest?.cases ?? []) {
-      out.push({ ...c, source: source.id, run, demos: countDemos(dir, c.case_id) });
+      if (hidden.has(c.case_id)) continue;
+      out.push({
+        ...c,
+        source: source.id,
+        run,
+        demos: countDemos(dir, c.case_id),
+        verdict: readVerdict(dir, c.case_id),
+      });
     }
   }
   // Newest runs first, and within a run the latest failures first.
@@ -122,7 +146,7 @@ export function sourceInfo(source: Source): SourceInfo {
  */
 export function readCase(source: Source, run: string, caseId: string): FailureCase | null {
   const dir = source.runs.get(run);
-  if (!dir || !isSafeSegment(caseId)) return null;
+  if (!dir || !isSafeSegment(caseId) || heldOut(dir).has(caseId)) return null;
   const c = readJson<FailureCase>(path.join(dir, 'cases', `${caseId}.json`));
   return c ? { ...c, run } : null;
 }
@@ -152,6 +176,30 @@ export function saveDemo(source: Source, run: string, caseId: string, demo: unkn
   fs.writeFileSync(`${file}.tmp`, JSON.stringify(demo));
   fs.renameSync(`${file}.tmp`, file);
   return { saved: path.relative(runDir, file), demos: countDemos(runDir, caseId) };
+}
+
+const VERDICTS: Verdict[] = ['impossible', 'feasible'];
+
+export function saveVerdict(source: Source, run: string, caseId: string, body: unknown): CaseVerdict {
+  const c = readCase(source, run, caseId);
+  if (!c) throw new HttpError(404, `unknown case ${run}/${caseId}`);
+  const verdict = (body as { verdict?: Verdict })?.verdict;
+  if (!verdict || !VERDICTS.includes(verdict)) throw new HttpError(400, `verdict must be one of ${VERDICTS}`);
+
+  const record: CaseVerdict = {
+    schema: 'unitree-grasp-verdict/v1',
+    run,
+    case_id: caseId,
+    shape: c.object.shape,
+    verdict,
+    created_at: new Date().toISOString(),
+  };
+  const dir = path.join(source.runs.get(run)!, 'verdicts');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${caseId}.json`);
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify(record));
+  fs.renameSync(`${file}.tmp`, file);
+  return record;
 }
 
 class HttpError extends Error {
@@ -218,6 +266,10 @@ export function datasetMiddleware(roots: DatasetRoots) {
       if (req.method === 'POST' && kind === 'demos' && rest.length === 1) {
         const demo = JSON.parse(await readBody(req));
         return send(res, 201, saveDemo(source, run, rest[0], demo));
+      }
+      if (req.method === 'POST' && kind === 'verdicts' && rest.length === 1) {
+        const body = JSON.parse(await readBody(req));
+        return send(res, 201, saveVerdict(source, run, rest[0], body));
       }
       return send(res, 404, { error: 'no such endpoint' });
     } catch (error) {

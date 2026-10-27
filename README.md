@@ -74,7 +74,22 @@ Regenerate `example` with `npm run sample-events`.
 Hand tracking must be on: Settings → Movement Tracking → Hand and Body Tracking.
 
 In a desktop browser the page is a preview. Drag to orbit, S switches source,
-N/P switch cases, G toggles the robot's attempts, and R resets.
+N/P switch cases, G toggles the robot's attempts, R resets, and X marks the case
+impossible.
+
+## Impossible cases
+
+Some cases can't be done by any two-finger gripper from that pose: too thin to
+pinch off the table, or wider than the jaws on every side. Press **IMPOSSIBLE**
+on those instead of recording a demo. It saves `<run>/verdicts/<case_id>.json`;
+press again to undo. Training leaves these cases out of its metrics and never
+exports the same object at the same heading (shape + yaw bin) again.
+
+## Held-out cases
+
+If a run has a `split.json` (unitree-grasping `scripts/split_failure_cases.py`),
+the cases it lists as `heldout` are hidden here. They are kept free of demos so
+training can be tested on failures nobody demonstrated.
 
 ```bash
 npm test          # grasp logic, demo recording, dataset API

@@ -1,4 +1,4 @@
-import type { CaseSummary, Demo, FailureCase, SourceInfo } from './types';
+import type { CaseSummary, CaseVerdict, Demo, FailureCase, SourceInfo, Verdict } from './types';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 120)}`);
@@ -26,6 +26,13 @@ export async function fetchMesh(source: string, c: FailureCase): Promise<string 
   const res = await fetch(`${base(source)}/files/${enc(c.run)}/${c.object.mesh}`);
   if (!res.ok) throw new Error(`mesh ${c.object.mesh}: ${res.status}`);
   return res.text();
+}
+
+export async function saveVerdict(source: string, run: string, caseId: string, verdict: Verdict): Promise<CaseVerdict> {
+  const url = `${base(source)}/verdicts/${enc(run)}/${enc(caseId)}`;
+  return json(
+    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict }) }),
+  );
 }
 
 export async function saveDemo(source: string, demo: Demo): Promise<{ saved: string; demos: number }> {

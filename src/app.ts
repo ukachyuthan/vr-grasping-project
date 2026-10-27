@@ -9,7 +9,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import { CONFIG } from './config';
-import { fetchCase, fetchCases, fetchMesh, fetchSources, saveDemo } from './data/client';
+import { fetchCase, fetchCases, fetchMesh, fetchSources, saveDemo, saveVerdict } from './data/client';
 import type { CaseSummary, Demo, Finger, SourceInfo } from './data/types';
 import { DemoSession, type HandRecord } from './sim/demo';
 import { headingYaw, taskPlacement } from './sim/frames';
@@ -26,7 +26,7 @@ const PANEL_SIM = new Vector3(0.3, 0.42, 0.22);
 /** Desktop preview stands in for a head at this height. */
 const DESKTOP_HEAD = new Vector3(0, 1.6, 0);
 
-export type Command = 'source' | 'prev' | 'next' | 'reset' | 'ghosts' | 'recenter';
+export type Command = 'source' | 'prev' | 'next' | 'reset' | 'ghosts' | 'recenter' | 'impossible';
 
 export class App {
   readonly scene = new Scene();
@@ -135,6 +135,15 @@ export class App {
     else if (id === 'reset') this.session?.reset();
     else if (id === 'ghosts') this.showGhosts = !this.showGhosts;
     else if (id === 'recenter') this.placed = false;
+    else if (id === 'impossible' && n) this.toggleImpossible(this.cases[this.index]);
+  }
+
+  /** Toggles, so a mis-poke can be undone with a second press. */
+  private toggleImpossible(summary: CaseSummary) {
+    const verdict = summary.verdict === 'impossible' ? 'feasible' : 'impossible';
+    saveVerdict(summary.source, summary.run, summary.case_id, verdict)
+      .then((r) => (summary.verdict = r.verdict))
+      .catch((error: Error) => (this.notice = `SAVE FAILED: ${error.message}`));
   }
 
   async load(index: number) {
@@ -202,6 +211,8 @@ export class App {
       .map((h) => h.joint('index-finger-tip').position);
     this.panel.update(dt, tips);
     this.panel.setButton('ghosts', this.showGhosts ? 'ROBOT ✓' : 'ROBOT', this.showGhosts);
+    const impossible = this.cases[this.index]?.verdict === 'impossible';
+    this.panel.setButton('impossible', impossible ? 'IMPOSSIBLE ✓' : 'IMPOSSIBLE', impossible);
     this.pushStatus();
 
     this.renderer.render(this.scene, this.camera);
@@ -297,7 +308,7 @@ export class App {
       lines = [
         `${c.object.shape} · YAW ${c.failure_key.yaw_bin} · ${this.index + 1}/${this.cases.length}`,
         `IT ${c.iteration} · ROBOT FAILED ${c.failed_attempts.length}× · ${summary.demos} DEMOS${hull}`,
-        this.session.message,
+        summary.verdict === 'impossible' ? 'MARKED IMPOSSIBLE — PRESS AGAIN TO UNDO' : this.session.message,
       ];
     }
     this.panel.setStatus(lines);

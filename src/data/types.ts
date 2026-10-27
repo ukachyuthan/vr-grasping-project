@@ -71,6 +71,22 @@ export interface SourceInfo {
   cases: number;
 }
 
+/**
+ * The demonstrator's judgement of a case: `impossible` when no two-finger
+ * gripper could lift it from that pose (too thin, too wide, …), so training
+ * stops showing it and evaluation leaves it out. Latest verdict wins.
+ */
+export type Verdict = 'impossible' | 'feasible';
+
+export interface CaseVerdict {
+  schema: 'unitree-grasp-verdict/v1';
+  run: string;
+  case_id: string;
+  shape: string;
+  verdict: Verdict;
+  created_at: string;
+}
+
 export interface CaseSummary {
   source: string;
   run: string;
@@ -78,6 +94,8 @@ export interface CaseSummary {
   shape: string;
   yaw_bin: number;
   iteration: number;
+  /** Latest verdict saved for this case, if any. */
+  verdict: Verdict | null;
   mean_failed_reward: number;
   /** Demos already saved for this case. */
   demos: number;

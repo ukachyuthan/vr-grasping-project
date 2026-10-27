@@ -110,6 +110,40 @@ describe('demos', () => {
   });
 });
 
+describe('verdicts', () => {
+  const verdictOf = async () =>
+    (await get('/samples.example/cases')).find((c: { case_id: string }) => c.case_id === TORUS).verdict;
+
+  it('marks a case impossible, lists it, and can be undone', async () => {
+    expect(await verdictOf()).toBeNull();
+    const res = await post(`/samples.example/verdicts/example/${TORUS}`, { verdict: 'impossible' });
+    expect(res.status).toBe(201);
+    expect((await res.json()).shape).toBe('torus');
+    expect(await verdictOf()).toBe('impossible');
+    const file = path.join(roots.sampleEvents, 'example/verdicts', `${TORUS}.json`);
+    expect(JSON.parse(fs.readFileSync(file, 'utf-8')).schema).toBe('unitree-grasp-verdict/v1');
+
+    await post(`/samples.example/verdicts/example/${TORUS}`, { verdict: 'feasible' });
+    expect(await verdictOf()).toBe('feasible');
+  });
+
+  it('refuses unknown verdicts and cases', async () => {
+    expect((await post(`/samples.example/verdicts/example/${TORUS}`, { verdict: 'maybe' })).status).toBe(400);
+    expect((await post(`/samples.example/verdicts/example/nope`, { verdict: 'impossible' })).status).toBe(404);
+  });
+});
+
+describe('split', () => {
+  it('hides held-out cases and refuses demos for them', async () => {
+    const before = (await get('/samples.example/cases')).length;
+    fs.writeFileSync(path.join(roots.sampleEvents, 'example/split.json'), JSON.stringify({ heldout: [TORUS] }));
+    const cases = await get('/samples.example/cases');
+    expect(cases).toHaveLength(before - 1);
+    expect(cases.some((c: { case_id: string }) => c.case_id === TORUS)).toBe(false);
+    expect((await post(`/samples.example/demos/example/${TORUS}`, demoFor('example', TORUS))).status).toBe(404);
+  });
+});
+
 describe('roots', () => {
   it('defaults to the sibling training repo and ./sample-events, with env overrides', () => {
     expect(resolveRoots('/x/app', {})).toEqual({

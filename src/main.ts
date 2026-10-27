@@ -33,7 +33,14 @@ window.addEventListener('resize', () => {
 });
 window.dispatchEvent(new Event('resize'));
 
-const KEYS: Record<string, Command> = { s: 'source', n: 'next', p: 'prev', r: 'reset', g: 'ghosts' };
+const KEYS: Record<string, Command> = {
+  s: 'source',
+  n: 'next',
+  p: 'prev',
+  r: 'reset',
+  g: 'ghosts',
+  x: 'impossible',
+};
 window.addEventListener('keydown', (e) => {
   const command = KEYS[e.key.toLowerCase()];
   if (command) app.command(command);

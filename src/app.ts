@@ -174,15 +174,27 @@ export class App {
     const dt = Math.min(0.05, Math.max(0, (time - this.lastTime) / 1000));
     this.lastTime = time;
 
+    // The head pose comes from the frame itself: the XR camera's matrix is only
+    // updated inside renderer.render(), so on a session's first frame it is
+    // stale and placing from it put the table half a metre under the floor.
+    let headTracked = !frame;
     if (frame) {
       const refSpace = this.renderer.xr.getReferenceSpace();
-      if (refSpace) this.hands.update(frame, refSpace, time);
-      this.renderer.xr.getCamera().matrixWorld.decompose(this.head, this.headQuat, this.tmp);
+      if (refSpace) {
+        this.hands.update(frame, refSpace, time);
+        const viewer = frame.getViewerPose(refSpace);
+        if (viewer) {
+          const { position: p, orientation: o } = viewer.transform;
+          this.head.set(p.x, p.y, p.z);
+          this.headQuat.set(o.x, o.y, o.z, o.w);
+          headTracked = true;
+        }
+      }
     } else {
       this.head.copy(DESKTOP_HEAD);
       this.headQuat.identity();
     }
-    if (!this.placed) this.place();
+    if (!this.placed && headTracked) this.place();
 
     const session = this.session;
     if (session && this.taskScene) {

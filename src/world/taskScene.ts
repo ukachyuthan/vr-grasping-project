@@ -12,6 +12,9 @@ import {
   Points,
   PointsMaterial,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
+  CanvasTexture,
   Vector3,
 } from 'three';
 import { CONFIG } from '../config';
@@ -31,6 +34,10 @@ export class TaskScene extends Group {
   readonly ghosts = new Group();
   private readonly material = new MeshStandardMaterial({ color: CONFIG.colors.object, roughness: 0.6 });
   private readonly targetBand: Mesh;
+  /** What to do right now, floating above the object (always faces the viewer). */
+  private readonly banner: Sprite;
+  private readonly bannerCanvas = document.createElement('canvas');
+  private bannerKey = '';
 
   constructor(c: FailureCase, model: ObjectModel) {
     super();
@@ -55,12 +62,26 @@ export class TaskScene extends Group {
     this.targetBand.position.set(rest[0], rest[1], rest[2] + c.task.lift_target_m);
     this.add(this.targetBand);
 
+    this.bannerCanvas.width = 1024;
+    this.bannerCanvas.height = 256;
+    this.banner = new Sprite(
+      new SpriteMaterial({ map: new CanvasTexture(this.bannerCanvas), transparent: true, depthTest: false }),
+    );
+    this.banner.scale.set(0.28, 0.07, 1);
+    this.banner.position.set(rest[0], rest[1], rest[2] + c.task.lift_target_m + 0.13);
+    this.banner.renderOrder = 10;
+    this.add(this.banner);
+
     this.buildGhosts(c);
     this.add(this.ghosts);
     this.setLook('idle');
   }
 
-  setLook(look: ObjectLook) {
+  /**
+   * `reached`: the object is above the target and must be held there; the
+   * slab lights up so the demonstrator knows to keep still.
+   */
+  setLook(look: ObjectLook, reached = false) {
     const color = {
       idle: CONFIG.colors.object,
       touched: CONFIG.colors.touched,
@@ -68,7 +89,35 @@ export class TaskScene extends Group {
       success: CONFIG.colors.success,
     }[look];
     this.material.color.set(color);
-    (this.targetBand.material as MeshBasicMaterial).opacity = look === 'success' ? 0.4 : 0.18;
+    (this.targetBand.material as MeshBasicMaterial).opacity = look === 'success' ? 0.55 : reached ? 0.45 : 0.18;
+  }
+
+  /** Two lines of large text above the object; redrawn only when they change. */
+  setBanner(title: string, detail: string, color: number) {
+    const key = `${title}|${detail}|${color}`;
+    if (key === this.bannerKey) return;
+    this.bannerKey = key;
+    const ctx = this.bannerCanvas.getContext('2d')!;
+    const { width: w, height: h } = this.bannerCanvas;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(3, 8, 13, 0.82)';
+    ctx.beginPath();
+    ctx.roundRect(8, 8, w - 16, h - 16, 36);
+    ctx.fill();
+    const hex = `#${color.toString(16).padStart(6, '0')}`;
+    ctx.strokeStyle = hex;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = hex;
+    ctx.font = 'bold 92px system-ui, sans-serif';
+    ctx.fillText(title, w / 2, detail ? 118 : 160);
+    if (detail) {
+      ctx.fillStyle = '#d8e6f0';
+      ctx.font = '56px system-ui, sans-serif';
+      ctx.fillText(detail, w / 2, 202);
+    }
+    (this.banner.material as SpriteMaterial).map!.needsUpdate = true;
   }
 
   private buildGhosts(c: FailureCase) {

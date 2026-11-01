@@ -39,6 +39,10 @@ export const CONFIG = {
 
   // ── UI ────────────────────────────────────────────────────────────────────
   buttonCooldown: 0.35,
+  /** After a demo saves, move on to the next case after this long (0 = stay). */
+  autoAdvanceSeconds: 2.0,
+  /** Chime on success and on save. */
+  sound: true,
 
   colors: {
     primary: 0x4fd1ff,

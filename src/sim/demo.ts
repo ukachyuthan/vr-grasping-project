@@ -57,6 +57,15 @@ export class DemoSession {
     return this.grasp.position.z - this.restZ;
   }
 
+  /** 0 → 1 while the object is held above the target, before it counts. */
+  get holdProgress(): number {
+    return Math.min(1, this.liftHeldFor / CONFIG.successHoldSeconds);
+  }
+
+  get liftTarget_m(): number {
+    return this.liftTarget;
+  }
+
   get liftTargetZ(): number {
     return this.restZ + this.liftTarget;
   }

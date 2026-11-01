@@ -15,6 +15,7 @@ import { DemoSession, type HandRecord } from './sim/demo';
 import { headingYaw, taskPlacement } from './sim/frames';
 import type { HandInput } from './sim/grasp';
 import { ObjectModel } from './sim/objectModel';
+import { chime, SAVED_NOTES, SUCCESS_NOTES } from './ui/chime';
 import { Panel } from './ui/panel';
 import { HandVisual } from './world/handVisual';
 import { TaskScene } from './world/taskScene';
@@ -51,6 +52,8 @@ export class App {
   private notice = 'LOADING CASES…';
 
   private placed = false;
+  /** Previous frame's demo state, to chime once on each transition. */
+  private lastState = '';
   private showGhosts = true;
   private lastTime = 0;
 
@@ -206,6 +209,7 @@ export class App {
       this.taskScene.object.quaternion.copy(session.grasp.quaternion);
       this.taskScene.ghosts.visible = this.showGhosts;
       const s = session.state;
+      const reached = s === 'held' && session.lift >= session.liftTarget_m;
       this.taskScene.setLook(
         s === 'success' || s === 'saving' || s === 'saved'
           ? 'success'
@@ -214,7 +218,14 @@ export class App {
             : session.grasp.touching
               ? 'touched'
               : 'idle',
+        reached,
       );
+      this.updateBanner(session, this.taskScene, reached);
+      if (s !== this.lastState && CONFIG.sound) {
+        if (s === 'success') chime(SUCCESS_NOTES);
+        else if (s === 'saved') chime(SAVED_NOTES);
+      }
+      this.lastState = s;
     }
 
     this.handVisual.update(this.hands, session?.grasp.holder ?? null);
@@ -300,11 +311,54 @@ export class App {
     return records;
   }
 
+  /** What to do now, in big text above the object. */
+  private updateBanner(session: DemoSession, scene: TaskScene, reached: boolean) {
+    const C = CONFIG.colors;
+    const target = `${(session.liftTarget_m * 100).toFixed(0)} CM`;
+    const summary = this.cases[this.index];
+    switch (session.state) {
+      case 'held':
+        if (reached) {
+          scene.setBanner('HOLD STILL…', `${Math.round(session.holdProgress * 100)}%`, C.success);
+        } else {
+          scene.setBanner(`LIFT ${(session.lift * 100).toFixed(1)} / ${target}`, 'raise it above the green square', C.held);
+        }
+        return;
+      case 'success':
+      case 'saving':
+        scene.setBanner('✓ SUCCESS', 'keep holding — saving', C.success);
+        return;
+      case 'saved':
+        scene.setBanner('✓ SAVED',
+          CONFIG.autoAdvanceSeconds > 0 ? 'next case in a moment' : 'press NEXT', C.success);
+        return;
+      case 'save-failed':
+        scene.setBanner('SAVE FAILED', session.message, C.failure);
+        return;
+      default:
+        if (summary?.verdict === 'impossible') {
+          scene.setBanner('MARKED IMPOSSIBLE', 'press IMPOSSIBLE again to undo', C.touched);
+        } else if (session.liftMax >= session.liftTarget_m) {
+          scene.setBanner('LET GO TOO EARLY', `keep holding above ${target} — don't release`, C.touched);
+        } else {
+          scene.setBanner('GRAB IT & LIFT', `hold it ${target} up, above the green square`, 0xffffff);
+        }
+    }
+  }
+
   private save(session: DemoSession, demo: Demo, summary: CaseSummary) {
     saveDemo(summary.source, demo)
       .then((r) => {
         summary.demos = r.demos;
         session.markSaved(true, `SAVED ✓  ${r.demos} DEMO${r.demos === 1 ? '' : 'S'}`);
+        if (CONFIG.autoAdvanceSeconds > 0) {
+          window.setTimeout(() => {
+            // Only if the demonstrator hasn't moved on (or retried) meanwhile.
+            if (this.session === session && session.state === 'saved') {
+              void this.load((this.index + 1) % this.cases.length);
+            }
+          }, CONFIG.autoAdvanceSeconds * 1000);
+        }
       })
       .catch((error: Error) => session.markSaved(false, `SAVE FAILED: ${error.message}`));
   }

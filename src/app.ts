@@ -311,6 +311,17 @@ export class App {
     return records;
   }
 
+  /** The next case after the current one with no demo and no IMPOSSIBLE verdict, or null. */
+  private nextUndone(): number | null {
+    const n = this.cases.length;
+    for (let k = 1; k <= n; k++) {
+      const i = (this.index + k) % n;
+      const c = this.cases[i];
+      if (c.demos === 0 && c.verdict !== 'impossible') return i;
+    }
+    return null;
+  }
+
   /** What to do now, in big text above the object. */
   private updateBanner(session: DemoSession, scene: TaskScene, reached: boolean) {
     const C = CONFIG.colors;
@@ -355,7 +366,9 @@ export class App {
           window.setTimeout(() => {
             // Only if the demonstrator hasn't moved on (or retried) meanwhile.
             if (this.session === session && session.state === 'saved') {
-              void this.load((this.index + 1) % this.cases.length);
+              const next = this.nextUndone();
+              if (next === null) this.notice = `ALL DONE — ${this.cases.length} CASES DEMONSTRATED`;
+              else void this.load(next);
             }
           }, CONFIG.autoAdvanceSeconds * 1000);
         }

@@ -2,7 +2,7 @@ import { CONFIG } from '../config';
 import type { Demo, DemoEvent, DemoFrame, FailureCase, HandFrame, Handedness } from '../data/types';
 import { HAND_JOINTS } from '../xr/hands';
 import { quatWXYZ, vec3 } from './frames';
-import { contactsToVec3, GraspController, type HandInput } from './grasp';
+import { contactsToVec3, GraspController, type GraspInfo, type HandInput } from './grasp';
 import type { ObjectModel } from './objectModel';
 
 export type DemoState = 'ready' | 'held' | 'success' | 'saving' | 'saved' | 'save-failed';
@@ -32,6 +32,8 @@ export class DemoSession {
   private time = 0;
   private liftHeldFor = 0;
   private successAt = -1;
+  /** The grasp that achieved the lift, kept in case the hand lets go before the save. */
+  private successGrasp: GraspInfo | null = null;
   private nextFrameAt = 0;
   private frames: DemoFrame[] = [];
   private events: DemoEvent[] = [];
@@ -77,6 +79,7 @@ export class DemoSession {
     this.time = 0;
     this.liftHeldFor = 0;
     this.successAt = -1;
+    this.successGrasp = null;
     this.nextFrameAt = 0;
     this.frames = [];
     this.events = [];
@@ -125,6 +128,7 @@ export class DemoSession {
       if (this.liftHeldFor >= CONFIG.successHoldSeconds) {
         this.state = 'success';
         this.successAt = t;
+        this.successGrasp = this.grasp.grasp;
         this.events.push({ t, type: 'success' });
         this.message = 'SUCCESS — HOLD…';
       }
@@ -159,7 +163,7 @@ export class DemoSession {
 
   private buildDemo(): Demo {
     const c = this.failureCase;
-    const g = this.grasp.grasp;
+    const g = this.successGrasp ?? this.grasp.grasp;
     // The grasp that achieved the lift is the last one before success.
     const graspEvent = [...this.events].reverse().find((e) => e.type === 'grasp');
     return {

@@ -148,6 +148,28 @@ describe('demo session', () => {
     expect(demo.frames[0].hands.left!.joints).toHaveLength(75);
   });
 
+  it('keeps the successful grasp when the object is dropped off the table before the save', () => {
+    const { c, model } = blockSetup();
+    const session = new DemoSession(c, model);
+    let h = hand('left', wrist, { thumb: onFace(-0.026), index: onFace(0.026) });
+    session.update(DT, [h], []);
+    for (let i = 0; i < 30; i++) {
+      h = shift(h, new Vector3(0, 0, 0.07 / 30));
+      session.update(DT, [h], []);
+    }
+    // Hold just past the success threshold, then carry it off the table and let go:
+    // it falls, respawns (which clears the live grasp), and only then does the demo save.
+    for (let i = 0; i < Math.ceil(CONFIG.successHoldSeconds / DT) + 2; i++) session.update(DT, [h], []);
+    expect(session.state).toBe('success');
+    h = shift(h, new Vector3(0, 0.6, 0));
+    session.update(DT, [h], []);
+    let demo = null;
+    for (let i = 0; i < 120 && !demo; i++) demo = session.update(DT, [hand('left', wrist, {}, false)], []);
+    expect(demo).not.toBeNull();
+    expect(demo!.grasp).not.toBeNull();
+    expect(demo!.grasp!.mode).toBe('opposed');
+  });
+
   it('does not count a lift that is not held long enough', () => {
     const { c, model } = blockSetup();
     const session = new DemoSession(c, model);

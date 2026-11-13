@@ -236,6 +236,28 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+/**
+ * The live robot check runs in the training repo's sim
+ * (scripts/grasp_check_server.py); VR_CHECK_URL overrides where.
+ */
+const checkUrl = () => process.env.VR_CHECK_URL ?? 'http://127.0.0.1:8765/check';
+
+async function forwardCheck(body: string, res: ServerResponse) {
+  const url = checkUrl();
+  let upstream: Response;
+  try {
+    upstream = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      signal: AbortSignal.timeout(60000),
+    });
+  } catch (error) {
+    return send(res, 503, { error: `robot check offline (${url}): ${(error as Error).message}` });
+  }
+  return send(res, upstream.status, await upstream.text());
+}
+
 export function datasetMiddleware(roots: DatasetRoots) {
   return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const url = new URL(req.url ?? '/', 'http://local');
@@ -243,6 +265,9 @@ export function datasetMiddleware(roots: DatasetRoots) {
     const parts = url.pathname.split('/').slice(2).map(decodeURIComponent);
 
     try {
+      if (req.method === 'POST' && parts[0] === 'check' && parts.length === 1) {
+        return await forwardCheck(await readBody(req), res);
+      }
       if (parts[0] !== 'sources') return send(res, 404, { error: 'no such endpoint' });
       if (req.method === 'GET' && parts.length === 1) {
         return send(res, 200, listSources(roots).map(sourceInfo));

@@ -39,6 +39,10 @@ export const CONFIG = {
 
   // ── UI ────────────────────────────────────────────────────────────────────
   buttonCooldown: 0.35,
+  /** After a demo saves, move on to the next case after this long (0 = stay). */
+  autoAdvanceSeconds: 2.0,
+  /** Chime on success and on save. */
+  sound: true,
 
   colors: {
     primary: 0x4fd1ff,
@@ -49,5 +53,13 @@ export const CONFIG = {
     failure: 0xff5d5d,
     table: 0x8a7056,
     target: 0x5ce08a,
+    /** The grasp's two contact points while held. */
+    grasp: 0xff5cf0,
   },
+
+  // ── Robot gripper (Franka hand), for the live grip check ─────────────────
+  /** Jaw opening range, m (the sim's grasp_width_bounds). */
+  robotJawWidth: [0.01, 0.08] as [number, number],
+  /** A contact's face may tilt this far from squeezing straight on before the object slips. */
+  robotMaxSqueezeAngleDeg: 40,
 };

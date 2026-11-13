@@ -153,4 +153,42 @@ export interface Demo {
   joint_names: string[];
   events: DemoEvent[];
   frames: DemoFrame[];
+  /** The live robot check's verdict, when the check service answered. */
+  robot_check?: RobotCheck | null;
+}
+
+/**
+ * Can the Franka hand grasp at the demo's two points? From unitree-grasping's
+ * scripts/grasp_check_server.py: the points run in the sim at the case's exact
+ * pose, from whatever approach the robot finds; the demonstrator's hand angle
+ * plays no part.
+ */
+export interface RobotCheck {
+  /** Some approach lifted at these points. */
+  lifted: boolean;
+  /** The approach angles that lifted. */
+  lifted_psi_deg: number[];
+  noisy_lifts: number;
+  noisy_tries: number;
+  /** Still lifts at least half the time with the robot's placement error. */
+  robust: boolean;
+  width_m: number;
+  /** Why it cannot work, in plain words; null when it is robust. */
+  reason: string | null;
+  ms: number;
+  /** The robot's best lifting approach at these points; empty when none lifts. */
+  attempts?: RobotAttempt[];
+}
+
+/** One robot grasp the check executed, in the object's frame (scaled, as the ghost is drawn). */
+export interface RobotAttempt {
+  psi_deg: number;
+  lifted: boolean;
+  /** Finger-pad midpoint, after any raise to clear the table. */
+  tcp_local: Vec3;
+  /** Hand orientation: +Z is the approach, the fingers close along ±Y. */
+  quat_local_wxyz: QuatWXYZ;
+  width_m: number;
+  /** How far the hand was raised so the fingertips clear the table. */
+  table_raise_m: number;
 }

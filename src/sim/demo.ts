@@ -1,8 +1,8 @@
 import { CONFIG } from '../config';
-import type { Demo, DemoEvent, DemoFrame, FailureCase, HandFrame, Handedness } from '../data/types';
+import type { Demo, DemoEvent, DemoFrame, FailureCase, HandFrame, Handedness, RobotCheck } from '../data/types';
 import { HAND_JOINTS } from '../xr/hands';
 import { quatWXYZ, vec3 } from './frames';
-import { contactsToVec3, GraspController, type HandInput } from './grasp';
+import { contactsToVec3, GraspController, type GraspInfo, type HandInput } from './grasp';
 import type { ObjectModel } from './objectModel';
 
 export type DemoState = 'ready' | 'held' | 'success' | 'saving' | 'saved' | 'save-failed';
@@ -28,10 +28,14 @@ export class DemoSession {
   state: DemoState = 'ready';
   liftMax = 0;
   message = '';
+  /** The live robot check of this take's demo: undefined until asked, null if the check was offline. */
+  robotCheck: RobotCheck | null | undefined = undefined;
 
   private time = 0;
   private liftHeldFor = 0;
   private successAt = -1;
+  /** The grasp that achieved the lift, kept in case the hand lets go before the save. */
+  private successGrasp: GraspInfo | null = null;
   private nextFrameAt = 0;
   private frames: DemoFrame[] = [];
   private events: DemoEvent[] = [];
@@ -57,6 +61,15 @@ export class DemoSession {
     return this.grasp.position.z - this.restZ;
   }
 
+  /** 0 → 1 while the object is held above the target, before it counts. */
+  get holdProgress(): number {
+    return Math.min(1, this.liftHeldFor / CONFIG.successHoldSeconds);
+  }
+
+  get liftTarget_m(): number {
+    return this.liftTarget;
+  }
+
   get liftTargetZ(): number {
     return this.restZ + this.liftTarget;
   }
@@ -65,9 +78,11 @@ export class DemoSession {
     this.grasp.reset();
     this.state = 'ready';
     this.liftMax = 0;
+    this.robotCheck = undefined;
     this.time = 0;
     this.liftHeldFor = 0;
     this.successAt = -1;
+    this.successGrasp = null;
     this.nextFrameAt = 0;
     this.frames = [];
     this.events = [];
@@ -116,6 +131,7 @@ export class DemoSession {
       if (this.liftHeldFor >= CONFIG.successHoldSeconds) {
         this.state = 'success';
         this.successAt = t;
+        this.successGrasp = this.grasp.grasp;
         this.events.push({ t, type: 'success' });
         this.message = 'SUCCESS — HOLD…';
       }
@@ -150,7 +166,7 @@ export class DemoSession {
 
   private buildDemo(): Demo {
     const c = this.failureCase;
-    const g = this.grasp.grasp;
+    const g = this.successGrasp ?? this.grasp.grasp;
     // The grasp that achieved the lift is the last one before success.
     const graspEvent = [...this.events].reverse().find((e) => e.type === 'grasp');
     return {

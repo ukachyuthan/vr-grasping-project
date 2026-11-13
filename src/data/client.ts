@@ -1,4 +1,4 @@
-import type { CaseSummary, CaseVerdict, Demo, FailureCase, SourceInfo, Verdict } from './types';
+import type { CaseSummary, CaseVerdict, Demo, FailureCase, RobotCheck, SourceInfo, Verdict } from './types';
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 120)}`);
@@ -32,6 +32,18 @@ export async function saveVerdict(source: string, run: string, caseId: string, v
   const url = `${base(source)}/verdicts/${enc(run)}/${enc(caseId)}`;
   return json(
     await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict }) }),
+  );
+}
+
+/** The live robot check of a finished demo; rejects if the check service is not running. */
+export async function checkDemo(demo: Demo, timeoutMs = 60000): Promise<RobotCheck> {
+  return json(
+    await fetch('/api/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(demo),
+      signal: AbortSignal.timeout(timeoutMs),
+    }),
   );
 }
 

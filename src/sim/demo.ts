@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import type { Demo, DemoEvent, DemoFrame, FailureCase, HandFrame, Handedness } from '../data/types';
+import type { Demo, DemoEvent, DemoFrame, FailureCase, HandFrame, Handedness, RobotCheck } from '../data/types';
 import { HAND_JOINTS } from '../xr/hands';
 import { quatWXYZ, vec3 } from './frames';
 import { contactsToVec3, GraspController, type GraspInfo, type HandInput } from './grasp';
@@ -28,6 +28,8 @@ export class DemoSession {
   state: DemoState = 'ready';
   liftMax = 0;
   message = '';
+  /** The live robot check of this take's demo: undefined until asked, null if the check was offline. */
+  robotCheck: RobotCheck | null | undefined = undefined;
 
   private time = 0;
   private liftHeldFor = 0;
@@ -76,6 +78,7 @@ export class DemoSession {
     this.grasp.reset();
     this.state = 'ready';
     this.liftMax = 0;
+    this.robotCheck = undefined;
     this.time = 0;
     this.liftHeldFor = 0;
     this.successAt = -1;

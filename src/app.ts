@@ -9,9 +9,10 @@ import {
   WebGLRenderer,
 } from 'three';
 import { CONFIG } from './config';
-import { fetchCase, fetchCases, fetchMesh, fetchSources, saveDemo, saveVerdict } from './data/client';
+import { checkDemo, fetchCase, fetchCases, fetchMesh, fetchSources, saveDemo, saveVerdict } from './data/client';
 import type { CaseSummary, Demo, Finger, SourceInfo } from './data/types';
 import { DemoSession, type HandRecord } from './sim/demo';
+import { gripCheck, type GripCheck } from './sim/gripCheck';
 import { headingYaw, taskPlacement } from './sim/frames';
 import type { HandInput } from './sim/grasp';
 import { ObjectModel } from './sim/objectModel';
@@ -220,7 +221,15 @@ export class App {
               : 'idle',
         reached,
       );
-      this.updateBanner(session, this.taskScene, reached);
+      // The two points the robot gets, while held and after the lift; red if its jaw could not close there.
+      const g = session.grasp.grasp;
+      const shown = g && this.model && (session.grasp.holder || s === 'success' || s === 'saving' || s === 'saved');
+      const grip = shown ? gripCheck(this.model!, g.c1, g.c2) : null;
+      this.taskScene.setGraspPoints(shown ? g.c1 : null, shown ? g.c2 : null,
+        grip && !grip.ok ? CONFIG.colors.failure : CONFIG.colors.grasp);
+      const check = session.robotCheck;
+      this.taskScene.setRobotAttempts(check?.attempts ?? null, check?.robust ? CONFIG.colors.success : CONFIG.colors.touched);
+      this.updateBanner(session, this.taskScene, reached, grip);
       if (s !== this.lastState && CONFIG.sound) {
         if (s === 'success') chime(SUCCESS_NOTES);
         else if (s === 'saved') chime(SAVED_NOTES);
@@ -323,26 +332,41 @@ export class App {
   }
 
   /** What to do now, in big text above the object. */
-  private updateBanner(session: DemoSession, scene: TaskScene, reached: boolean) {
+  private updateBanner(session: DemoSession, scene: TaskScene, reached: boolean, grip: GripCheck | null) {
     const C = CONFIG.colors;
     const target = `${(session.liftTarget_m * 100).toFixed(0)} CM`;
     const summary = this.cases[this.index];
+    const gripLine = grip ? `\n${grip.text}` : '';
     switch (session.state) {
       case 'held':
         if (reached) {
-          scene.setBanner('HOLD STILL…', `${Math.round(session.holdProgress * 100)}%`, C.success);
+          scene.setBanner('HOLD STILL…', `${Math.round(session.holdProgress * 100)}%${gripLine}`, C.success);
         } else {
-          scene.setBanner(`LIFT ${(session.lift * 100).toFixed(1)} / ${target}`, 'raise it above the green square', C.held);
+          scene.setBanner(`LIFT ${(session.lift * 100).toFixed(1)} / ${target}`,
+            `raise it above the green square${gripLine}`, C.held);
         }
         return;
       case 'success':
-      case 'saving':
         scene.setBanner('✓ SUCCESS', 'keep holding — saving', C.success);
         return;
-      case 'saved':
-        scene.setBanner('✓ SAVED',
-          CONFIG.autoAdvanceSeconds > 0 ? 'next case in a moment' : 'press NEXT', C.success);
+      case 'saving':
+        scene.setBanner('✓ SUCCESS', 'checking whether the robot can grasp at these points…', C.success);
         return;
+      case 'saved': {
+        const check = session.robotCheck;
+        if (check && !check.robust) {
+          const ghost = check.attempts?.length
+            ? 'AMBER ghost: the robot\'s best approach at your points.\n' : '';
+          scene.setBanner(check.lifted ? '✗ POINTS TOO FRAGILE' : "✗ ROBOT CAN'T GRASP AT THESE POINTS",
+            `${check.reason ?? 'it does not lift'}\n${ghost}Press RETRY and pick other points.`, C.failure);
+        } else {
+          const next = CONFIG.autoAdvanceSeconds > 0 ? 'next case in a moment' : 'press NEXT';
+          scene.setBanner(check ? '✓ ROBOT CAN GRASP HERE' : '✓ SAVED',
+            check ? `lifts ${check.noisy_lifts}/${check.noisy_tries} with placement error · ${next}` : next,
+            C.success);
+        }
+        return;
+      }
       case 'save-failed':
         scene.setBanner('SAVE FAILED', session.message, C.failure);
         return;
@@ -358,11 +382,27 @@ export class App {
   }
 
   private save(session: DemoSession, demo: Demo, summary: CaseSummary) {
-    saveDemo(summary.source, demo)
+    // Ask the sim whether the robot hand can do this grasp, then save with the
+    // verdict attached. An offline check never blocks saving.
+    session.message = 'ROBOT CHECK…';
+    checkDemo(demo)
+      .catch((error: Error) => {
+        console.warn('[robot-check]', error.message);
+        return null;
+      })
+      .then((check) => {
+        session.robotCheck = check;
+        demo.robot_check = check;
+        return saveDemo(summary.source, demo);
+      })
       .then((r) => {
         summary.demos = r.demos;
-        session.markSaved(true, `SAVED ✓  ${r.demos} DEMO${r.demos === 1 ? '' : 'S'}`);
-        if (CONFIG.autoAdvanceSeconds > 0) {
+        const check = session.robotCheck;
+        const robot = !check ? '  · ROBOT CHECK OFFLINE'
+          : check.robust ? `  · ROBOT ✓ ${check.noisy_lifts}/${check.noisy_tries}` : '  · ROBOT ✗';
+        session.markSaved(true, `SAVED ✓  ${r.demos} DEMO${r.demos === 1 ? '' : 'S'}${robot}`);
+        // Stay on the case when the robot cannot do the grasp, so another can be tried.
+        if (CONFIG.autoAdvanceSeconds > 0 && (check?.robust ?? true)) {
           window.setTimeout(() => {
             // Only if the demonstrator hasn't moved on (or retried) meanwhile.
             if (this.session === session && session.state === 'saved') {

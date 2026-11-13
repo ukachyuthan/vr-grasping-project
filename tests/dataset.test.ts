@@ -133,6 +133,45 @@ describe('verdicts', () => {
   });
 });
 
+describe('robot check', () => {
+  const check = (body: unknown) =>
+    fetch(base.replace('/sources', '/check'), { method: 'POST', body: JSON.stringify(body) });
+
+  afterEach(() => {
+    delete process.env.VR_CHECK_URL;
+  });
+
+  it('forwards the demo to the check service and returns its verdict', async () => {
+    let received: unknown;
+    const upstream = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        received = JSON.parse(body);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ lifted: true, robust: true, reason: null }));
+      });
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    process.env.VR_CHECK_URL = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/check`;
+    try {
+      const res = await check(demoFor('example', TORUS));
+      expect(res.status).toBe(200);
+      expect((await res.json()).robust).toBe(true);
+      expect(received).toMatchObject({ case_id: TORUS });
+    } finally {
+      upstream.close();
+    }
+  });
+
+  it('answers 503 when the check service is not running', async () => {
+    process.env.VR_CHECK_URL = 'http://127.0.0.1:9/check';
+    const res = await check(demoFor('example', TORUS));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toMatch(/robot check offline/);
+  });
+});
+
 describe('split', () => {
   it('hides held-out cases and refuses demos for them', async () => {
     const before = (await get('/samples.example/cases')).length;
